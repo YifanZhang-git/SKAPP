@@ -2,9 +2,9 @@
 
 This repo contains a reference implementation of the SKAPP model described in the following paper:
 
-> Xovee Xu, Yifan Zhang, Fan Zhou, and Jingkuan Song
-> Improving Multimodal Social Media Popularity Prediction via Selective Retrieval Knowledge Augmentation
-> AAAI Conference on Artificial Intelligence, 2025.
+> Xovee Xu, Shuojun Lin, Fan Zhou, and Jingkuan Song
+> Learning to Curate Context: Jointly Optimizing Retrieval and Prediction for Multimodal Social Media Popularity
+> AAAI Conference on Artificial Intelligence, 2026.
 
 SKAPP is a multimodal learning framework for social UGCs. It is equipped with a
 meta retriever, a selective refiner, and a knowledge augmentation prediction
@@ -145,11 +145,18 @@ Please refer to `config.yaml`.
 ## Citation
 
 ```bibtex
-@inproceedings{xu2025skapp,
-  author    = {Xovee Xu and Yifan Zhang and Fan Zhou and Jingkuan Song},
-  title     = {Improving Multimodal Social Media Popularity Prediction via Selective Retrieval Knowledge Augmentation},
-  booktitle = {AAAI Conference on Artificial Intelligence},
-  year      = {2025}
+@inproceedings{xu2026learning,
+  title = {Learning to Curate Context: Jointly Optimizing Retrieval and Prediction for Multimodal Social Media Popularity},
+  author = {Xovee Xu and Shuojun Lin and Fan Zhou and Jingkuan Song},
+  booktitle = {AAAI Conference on Artificial Intelligence (AAAI)},
+  year = {2026},
+  volume = {40},
+  number = {2},
+  month = {jan},
+  numpages = {9},
+  pages = {1382--1390},
+  publisher = {AAAI},
+  doi = {10.1609/aaai.v40i2.37112}
 }
 ```
 
