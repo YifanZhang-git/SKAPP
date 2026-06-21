@@ -31,6 +31,19 @@ def load_cfg(dataset_id, mode):
     return mode_cfg
 
 
+def apply_cfg(parser, args, cfg):
+    action_by_dest = {
+        action.dest: action
+        for action in parser._actions
+        if action.dest != argparse.SUPPRESS
+    }
+    for key, value in cfg.items():
+        action = action_by_dest.get(key)
+        if action is not None and action.type is not None and value is not None:
+            value = action.type(value)
+        setattr(args, key, value)
+
+
 def seed_init(seed):
     seed = int(seed)
     random.seed(seed)
@@ -249,8 +262,7 @@ def main():
     args = parser.parse_args()
 
     cfg = load_cfg(args.dataset_id, 'train')
-    for k, v in cfg.items():
-        setattr(args, k, v)
+    apply_cfg(parser, args, cfg)
 
     seed_init(args.seed)
     train_val(args)
