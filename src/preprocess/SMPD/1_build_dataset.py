@@ -1,9 +1,14 @@
 import argparse
 import re
+import sys
 import zipfile
 from pathlib import Path
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from retrieval_utils import SPLIT_VALUES, assign_temporal_splits
 
 
 DEFAULT_RAW_DIR = Path("datasets/raw_dataset/SMPD")
@@ -208,7 +213,6 @@ def process_meta_data(
     train_temporalspatial_information,
     train_user_data,
     label_data,
-    path,
     train_img_paths=None,
 ):
     image_ids = [
@@ -248,10 +252,20 @@ def process_meta_data(
     }
 
     dataframe = pd.DataFrame(dataset)
-    output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    dataframe.to_pickle(output_path)
     return dataframe
+
+
+def _print_split_summary(dataframe):
+    print("Temporal split by postdate:")
+    print(dataframe["split"].value_counts().reindex(SPLIT_VALUES).fillna(0).astype(int).to_string())
+    for split_name in SPLIT_VALUES:
+        subset = dataframe[dataframe["split"] == split_name]
+        if len(subset) == 0:
+            continue
+        print(
+            f"{split_name} postdate range: "
+            f"{subset['postdate'].min()} - {subset['postdate'].max()}"
+        )
 
 
 def build_dataset(raw_dir=DEFAULT_RAW_DIR, metadata_zip=None, output_path="datasets/SMPD/dataset.pkl"):
@@ -265,14 +279,19 @@ def build_dataset(raw_dir=DEFAULT_RAW_DIR, metadata_zip=None, output_path="datas
         metadata["temporal"],
         metadata["user"],
         metadata["label"],
-        output_path,
         metadata["image_path"],
     )
+    dataframe = assign_temporal_splits(dataframe, "postdate", tie_break_columns=["image_id"])
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    dataframe.to_pickle(output_path)
     print(
         "SMPD dataset processed: "
         f"{len(dataframe)} UGCs, {dataframe['image_id'].nunique()} unique image ids, "
         f"{len({item[0] for item in _row_keys(metadata['additional'])})} users"
     )
+    _print_split_summary(dataframe)
+    print(f"Saved SMPD dataset to {output_path}")
     return dataframe
 
 

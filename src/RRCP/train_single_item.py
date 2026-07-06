@@ -232,7 +232,7 @@ def run_one_epoch(args, model, loss_fn, optim, train_data_loader, valid_data_loa
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--seed', default='2024', type=str, help='value of random seed')
+    parser.add_argument('--seed', default='12', type=str, help='value of random seed')
     parser.add_argument('--device', default='cuda:0', type=str, help='device used in training')
     parser.add_argument('--metric', default='MSE', type=str, help='the judgement of the training')
     parser.add_argument('--save', default=r'./saved_models/', type=str,

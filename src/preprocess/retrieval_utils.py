@@ -1,6 +1,8 @@
 import heapq
+import json
 import math
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +11,109 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 
-def split_and_save_pkl(input_path, train_path, valid_path, test_path, seed=42):
+DEFAULT_SEED = 12
+SPLIT_VALUES = ("train", "valid", "test")
+
+DANGEROUS_FEATURES = {
+    "label",
+    "labellog2",
+    "label_log2",
+    "day30",
+    "likecount",
+    "like_count",
+    "viewcount",
+    "view_count",
+    "commentnum",
+    "comment_num",
+    "retrievedlabel",
+    "retrieved_label",
+    "retrievedlabellist",
+    "retrieved_label_list",
+    "rrcpsilver",
+    "rrcp_silver",
+    "rrcpgold",
+    "rrcp_gold",
+    "prediction",
+    "predicted",
+    "output",
+    "taken_timestamp",
+}
+
+
+def _normalized_feature_name(name):
+    return str(name).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _compact_feature_name(name):
+    return _normalized_feature_name(name).replace("_", "")
+
+
+def validate_retrieval_features(features):
+    dangerous = []
+    for feature in features:
+        normalized = _normalized_feature_name(feature)
+        compact = _compact_feature_name(feature)
+        if normalized in DANGEROUS_FEATURES or compact in DANGEROUS_FEATURES:
+            dangerous.append(feature)
+    if dangerous:
+        raise ValueError(
+            "Refusing to use target, post-outcome, or derived-label columns for retrieval: "
+            f"{dangerous}"
+        )
+
+
+def _temporal_sort_key(series, time_column):
+    numeric = pd.to_numeric(series, errors="coerce")
+    if not numeric.isna().any():
+        return numeric
+
+    parsed = pd.to_datetime(series, errors="coerce", utc=True)
+    if parsed.isna().any():
+        bad_count = int(parsed.isna().sum())
+        raise ValueError(
+            f"Cannot create a temporal split: {time_column} has {bad_count} missing or invalid timestamps."
+        )
+    return parsed.astype("int64")
+
+
+def assign_temporal_splits(dataframe, time_column, tie_break_columns=None,
+                           train_ratio=0.8, valid_ratio=0.1):
+    if time_column not in dataframe.columns:
+        raise KeyError(f"Temporal split column not found: {time_column}")
+
+    tie_break_columns = list(tie_break_columns or [])
+    missing_tie_breaks = [column for column in tie_break_columns if column not in dataframe.columns]
+    if missing_tie_breaks:
+        raise KeyError(f"Temporal split tie-break columns not found: {missing_tie_breaks}")
+
+    total = len(dataframe)
+    if total < 3:
+        raise ValueError("At least 3 rows are required to create train/valid/test temporal splits.")
+    if train_ratio <= 0 or valid_ratio <= 0 or train_ratio + valid_ratio >= 1:
+        raise ValueError("Temporal split ratios must satisfy train_ratio > 0, valid_ratio > 0, and sum < 1.")
+
+    data = dataframe.copy()
+    data["_temporal_sort_key"] = _temporal_sort_key(data[time_column], time_column)
+    data = data.sort_values(["_temporal_sort_key", *tie_break_columns], kind="mergesort").reset_index(drop=True)
+
+    test_ratio = 1.0 - train_ratio - valid_ratio
+    test_count = max(1, int(round(total * test_ratio)))
+    valid_count = max(1, int(round(total * valid_ratio)))
+    if test_count + valid_count >= total:
+        test_count = 1
+        valid_count = 1
+    train_count = total - valid_count - test_count
+
+    split = (
+        ["train"] * train_count
+        + ["valid"] * valid_count
+        + ["test"] * test_count
+    )
+    data["split"] = split
+    return data.drop(columns=["_temporal_sort_key"])
+
+
+def split_and_save_pkl(input_path, train_path, valid_path, test_path, seed=DEFAULT_SEED):
     dataset = pd.read_pickle(input_path)
 
     train_data, valid_data = train_test_split(dataset, test_size=0.2, random_state=seed)
@@ -22,6 +126,61 @@ def split_and_save_pkl(input_path, train_path, valid_path, test_path, seed=42):
     train_data.to_pickle(train_path)
     valid_data.to_pickle(valid_path)
     test_data.to_pickle(test_path)
+    return {
+        "train": int(len(train_data)),
+        "valid": int(len(valid_data)),
+        "test": int(len(test_data)),
+    }
+
+
+def split_by_column_and_save_pkl(input_path, train_path, valid_path, test_path, split_column="split"):
+    dataset = pd.read_pickle(input_path)
+    if split_column not in dataset.columns:
+        raise KeyError(f"Split column not found: {split_column}")
+
+    normalized = dataset[split_column].astype(str).str.lower()
+    train_data = dataset[normalized == "train"].copy()
+    valid_data = dataset[normalized.isin(["valid", "val", "validation"])].copy()
+    test_data = dataset[normalized == "test"].copy()
+
+    if min(len(train_data), len(valid_data), len(test_data)) == 0:
+        counts = normalized.value_counts().to_dict()
+        raise ValueError(f"Invalid split column {split_column}; split counts: {counts}")
+
+    train_data.reset_index(drop=True, inplace=True)
+    valid_data.reset_index(drop=True, inplace=True)
+    test_data.reset_index(drop=True, inplace=True)
+
+    train_data.to_pickle(train_path)
+    valid_data.to_pickle(valid_path)
+    test_data.to_pickle(test_path)
+    return {
+        "train": int(len(train_data)),
+        "valid": int(len(valid_data)),
+        "test": int(len(test_data)),
+    }
+
+
+def write_split_manifest(output_dir, dataset_path, dataset_name, seed, split_column,
+                         split_counts, retrieval_num, scalar_features, list_features,
+                         extra_list_columns=None, exclude_group_column=None):
+    manifest = {
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "dataset_name": dataset_name,
+        "dataset_path": str(dataset_path),
+        "split_method": f"column:{split_column}" if split_column else "random_80_10_10",
+        "seed": int(seed),
+        "split_counts": split_counts,
+        "retrieval_num": int(retrieval_num),
+        "scalar_features": list(scalar_features),
+        "list_features": list(list_features),
+        "extra_list_columns": list(extra_list_columns or []),
+        "exclude_group_column": exclude_group_column,
+        "retrieval_pool": "train",
+    }
+    output_path = Path(output_dir) / "split_manifest.json"
+    with open(output_path, "w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2)
 
 
 def create_retrieval_pool(train_path, valid_path, retrieval_pool_path):
@@ -229,10 +388,13 @@ def _select_top(scores, retrieval_num, pool_size, excluded_indices, tie_break="a
 
 def retrieval_data(retrieval_num, data_path, retrieval_pool_path, scalar_features, list_features,
                    dataset_name="dataset", weight_mode="idf", absolute_weight=False,
-                   tie_break="asc", include_zero_score_candidates=False):
+                   tie_break="asc", include_zero_score_candidates=False,
+                   exclude_group_column=None):
     retrieval_pool = pd.read_pickle(retrieval_pool_path)
     data = pd.read_pickle(data_path)
     required = set(scalar_features + list_features + ["image_id", "label"])
+    if exclude_group_column:
+        required.add(exclude_group_column)
     missing = required - set(data.columns) | required - set(retrieval_pool.columns)
     if missing:
         raise KeyError(f"{dataset_name} retrieval input is missing required columns: {sorted(missing)}")
@@ -246,6 +408,10 @@ def retrieval_data(retrieval_num, data_path, retrieval_pool_path, scalar_feature
     pool_positions = defaultdict(list)
     for index, image_id in enumerate(pool_id_keys):
         pool_positions[image_id].append(index)
+    group_positions = defaultdict(list)
+    if exclude_group_column:
+        for index, group in enumerate(retrieval_pool[exclude_group_column].astype(str).tolist()):
+            group_positions[group].append(index)
     pool_labels = retrieval_pool["label"].tolist()
 
     retrieved_item_id_list = []
@@ -255,6 +421,8 @@ def retrieval_data(retrieval_num, data_path, retrieval_pool_path, scalar_feature
     for _, query_row in tqdm(data.iterrows(), total=len(data)):
         query_id = str(query_row["image_id"])
         excluded_indices = set(pool_positions.get(query_id, []))
+        if exclude_group_column:
+            excluded_indices.update(group_positions.get(str(query_row[exclude_group_column]), []))
         scores = _score_query(
             query_row,
             scalar_features,
@@ -281,9 +449,10 @@ def retrieval_data(retrieval_num, data_path, retrieval_pool_path, scalar_feature
 
 
 def run_retrieval_pipeline(dataset_path, output_dir, retrieval_num, scalar_features, list_features,
-                           extra_list_columns=None, seed=42, dataset_name="dataset",
+                           extra_list_columns=None, seed=DEFAULT_SEED, dataset_name="dataset",
                            weight_mode="idf", absolute_weight=False, tie_break="asc",
-                           include_zero_score_candidates=False):
+                           include_zero_score_candidates=False, split_column=None,
+                           exclude_group_column=None):
     dataset_path = Path(dataset_path)
     output_dir = Path(output_dir) if output_dir else dataset_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -293,25 +462,36 @@ def run_retrieval_pipeline(dataset_path, output_dir, retrieval_num, scalar_featu
     test_path = output_dir / "test.pkl"
     retrieval_pool_path = output_dir / "retrieval_pool.pkl"
 
+    validate_retrieval_features(scalar_features + list_features + (extra_list_columns or []))
     dedupe_columns = list(dict.fromkeys(list_features + (extra_list_columns or [])))
     dedupe_list_columns(dataset_path, dedupe_columns, dataset_name)
-    split_and_save_pkl(dataset_path, train_path, valid_path, test_path, seed)
+    if split_column:
+        split_counts = split_by_column_and_save_pkl(dataset_path, train_path, valid_path, test_path, split_column)
+    else:
+        split_counts = split_and_save_pkl(dataset_path, train_path, valid_path, test_path, seed)
     print("Split dataset done!")
+    write_split_manifest(
+        output_dir, dataset_path, dataset_name, seed, split_column, split_counts,
+        retrieval_num, scalar_features, list_features, extra_list_columns, exclude_group_column
+    )
 
     create_retrieval_pool(train_path, valid_path, retrieval_pool_path)
     print("Create retrieval pool done!")
 
     retrieval_data(
         retrieval_num, train_path, retrieval_pool_path, scalar_features, list_features,
-        dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates
+        dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates,
+        exclude_group_column
     )
     retrieval_data(
         retrieval_num, valid_path, retrieval_pool_path, scalar_features, list_features,
-        dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates
+        dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates,
+        exclude_group_column
     )
     retrieval_data(
         retrieval_num, test_path, retrieval_pool_path, scalar_features, list_features,
-        dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates
+        dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates,
+        exclude_group_column
     )
     print("Retrieval done!")
 

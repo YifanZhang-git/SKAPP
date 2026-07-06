@@ -256,8 +256,8 @@ def merged_text_create_and_to_vec(meta_file_path, batch_size=256, device=None, f
         angel = AnglE.from_pretrained(model_name, pooling_strategy="cls_avg")
         if hasattr(angel, "to"):
             angel = angel.to(device)
-        elif str(device).startswith("cuda"):
-            angel = angel.cuda()
+        elif str(device).startswith("cuda") and hasattr(angel, "cuda"):
+            angel = getattr(angel, "cuda")()
         return angel
 
     text_list = meta_data["text"].fillna("").astype(str).tolist()
@@ -266,10 +266,8 @@ def merged_text_create_and_to_vec(meta_file_path, batch_size=256, device=None, f
     merged_text_vec_list = []
     angel = load_bert_model()
 
-    for _, batch_texts in tqdm(
-        _batched([text + image_text for text, image_text in zip(text_list, image_to_text_list)], batch_size),
-        total=_batch_count(text_list, batch_size),
-    ):
+    merged_inputs = [" ".join([text, image_text]).strip() for text, image_text in zip(text_list, image_to_text_list)]
+    for _, batch_texts in tqdm(_batched(merged_inputs, batch_size), total=_batch_count(merged_inputs, batch_size)):
         merged_text_list.extend(batch_texts)
         text_embedding = angel.encode(batch_texts, to_numpy=True)
         if text_embedding.ndim == 1:

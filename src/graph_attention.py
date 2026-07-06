@@ -51,7 +51,7 @@ class Model(nn.Module):
 
         self.label_embedding_linear = nn.Linear(retrieval_num, feature_dim)
 
-        self.graph = GraphLearner(device='cuda:0', hidden_dim=768, class_num = retrieval_num)
+        self.graph = GraphLearner(device=None, hidden_dim=feature_dim, class_num=retrieval_num)
         self.multihead_attn = nn.MultiheadAttention(embed_dim=feature_dim, num_heads=8,batch_first=True)
 
 

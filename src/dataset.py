@@ -4,6 +4,31 @@ import pandas as pd
 from pathlib import Path
 
 
+FORBIDDEN_METADATA_FIELDS = {
+    'label',
+    'labellog2',
+    'label_log2',
+    'day30',
+    'likecount',
+    'like_count',
+    'viewcount',
+    'view_count',
+    'commentnum',
+    'comment_num',
+    'retrievedlabel',
+    'retrieved_label',
+    'retrievedlabellist',
+    'retrieved_label_list',
+    'rrcpsilver',
+    'rrcp_silver',
+    'rrcpgold',
+    'rrcp_gold',
+    'prediction',
+    'predicted',
+    'output',
+}
+
+
 def custom_collate_fn(batch):
     if len(batch[0]) == 8:
         mean_pooling_vec, merge_text_vec, retrieved_visual_feature_embedding_cls, \
@@ -55,11 +80,14 @@ def _resolve_metadata_fields(dataframe, fields):
     resolved_fields = []
 
     for field in fields:
+        normalized = field.lower().replace('_', '')
+        if field.lower() in FORBIDDEN_METADATA_FIELDS or normalized in FORBIDDEN_METADATA_FIELDS:
+            raise ValueError(f'Refusing to use target or derived-label column as metadata: {field}')
+
         if field in dataframe.columns:
             resolved_fields.append(field)
             continue
 
-        normalized = field.lower().replace('_', '')
         alias = aliases.get(normalized)
         if alias in dataframe.columns:
             resolved_fields.append(alias)

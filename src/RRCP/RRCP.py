@@ -5,9 +5,16 @@ from tqdm import tqdm
 import argparse
 from pathlib import Path
 
-def load_model(model_path):
-    model = torch.load(model_path, weights_only=False)
-    model.cuda()
+
+def resolve_device(device=None):
+    if device:
+        return torch.device(device)
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def load_model(model_path, device):
+    model = torch.load(model_path, map_location=device, weights_only=False)
+    model.to(device)
     model.eval()
     return model
 
@@ -47,7 +54,7 @@ def _prepare_retrieval_source(df, input_path):
     }
 
 
-def _retrieved_batch(source, start, end, retrieval_num):
+def _retrieved_batch(source, start, end, retrieval_num, device):
     if source['mode'] == 'expanded':
         visual = np.asarray(source['visual'][start:end], dtype=np.float32)[:, :retrieval_num]
         textual = np.asarray(source['textual'][start:end], dtype=np.float32)[:, :retrieval_num]
@@ -59,7 +66,7 @@ def _retrieved_batch(source, start, end, retrieval_num):
         )
         visual = source['visual_bank'][indices]
         textual = source['textual_bank'][indices]
-    return torch.from_numpy(visual).cuda(), torch.from_numpy(textual).cuda()
+    return torch.from_numpy(visual).to(device), torch.from_numpy(textual).to(device)
 
 
 def _predict_single_item_delta(model, current_visual, current_textual, retrieved_visual,
@@ -98,7 +105,7 @@ def _predict_single_item_delta(model, current_visual, current_textual, retrieved
         torch.cat(labels_with, dim=0).reshape(batch_size, retrieval_num),
     )
 
-def preprocess_RRCP_gold(input, dissembled_model_path, output, target_num, retrieval_num):
+def preprocess_RRCP_gold(input, dissembled_model_path, output, target_num, retrieval_num, device):
     batch_size = 128
     df = pd.read_pickle(input)
 
@@ -108,20 +115,20 @@ def preprocess_RRCP_gold(input, dissembled_model_path, output, target_num, retri
     retrieved_label_list = _retrieved_labels(df)
     retrieval_source = _prepare_retrieval_source(df, input)
 
-    dissembled_model = load_model(dissembled_model_path)
+    dissembled_model = load_model(dissembled_model_path, device)
 
     RRCP_gold_list_list = []
 
     with torch.no_grad():
         for i in tqdm(range(0, len(df), batch_size)):
             end = min(i + batch_size, len(df))
-            merged_text_vec = torch.from_numpy(np.asarray(merged_text_vec_list[i:end], dtype=np.float32)).cuda()
-            cls_vec = torch.from_numpy(np.asarray(cls_vec_list[i:end], dtype=np.float32)).cuda()
-            real_label = torch.from_numpy(np.asarray(label_list[i:end], dtype=np.float32)).cuda()
+            merged_text_vec = torch.from_numpy(np.asarray(merged_text_vec_list[i:end], dtype=np.float32)).to(device)
+            cls_vec = torch.from_numpy(np.asarray(cls_vec_list[i:end], dtype=np.float32)).to(device)
+            real_label = torch.from_numpy(np.asarray(label_list[i:end], dtype=np.float32)).to(device)
             retrieved_visual_feature_embedding_cls, retrieved_textual_feature_embedding = _retrieved_batch(
-                retrieval_source, i, end, retrieval_num
+                retrieval_source, i, end, retrieval_num, device
             )
-            retrieved_label = torch.from_numpy(retrieved_label_list[i:end, :retrieval_num]).cuda()
+            retrieved_label = torch.from_numpy(retrieved_label_list[i:end, :retrieval_num]).to(device)
 
             label_without_retrieval, label_with_retrieval = _predict_single_item_delta(
                 dissembled_model, cls_vec, merged_text_vec, retrieved_visual_feature_embedding_cls,
@@ -136,7 +143,7 @@ def preprocess_RRCP_gold(input, dissembled_model_path, output, target_num, retri
     df.to_pickle(output)
     print('RRCP_gold processed and saved.')
 
-def preprocess_RRCP_silver(input, dissembled_model_path, all_model_path, output, target_num, retrieval_num):
+def preprocess_RRCP_silver(input, dissembled_model_path, all_model_path, output, target_num, retrieval_num, device):
     batch_size = 128
     df = pd.read_pickle(input)
 
@@ -145,20 +152,20 @@ def preprocess_RRCP_silver(input, dissembled_model_path, all_model_path, output,
     retrieved_label_list = _retrieved_labels(df)
     retrieval_source = _prepare_retrieval_source(df, input)
 
-    all_model = load_model(all_model_path)
-    dissembled_model = load_model(dissembled_model_path)
+    all_model = load_model(all_model_path, device)
+    dissembled_model = load_model(dissembled_model_path, device)
 
     RRCP_silver_list_list = []
 
     with torch.no_grad():
         for i in tqdm(range(0, len(df), batch_size)):
             end = min(i + batch_size, len(df))
-            merged_text_vec = torch.from_numpy(np.asarray(merged_text_vec_list[i:end], dtype=np.float32)).cuda()
-            cls_vec = torch.from_numpy(np.asarray(cls_vec_list[i:end], dtype=np.float32)).cuda()
+            merged_text_vec = torch.from_numpy(np.asarray(merged_text_vec_list[i:end], dtype=np.float32)).to(device)
+            cls_vec = torch.from_numpy(np.asarray(cls_vec_list[i:end], dtype=np.float32)).to(device)
             retrieved_visual_feature_embedding_cls, retrieved_textual_feature_embedding = _retrieved_batch(
-                retrieval_source, i, end, retrieval_num
+                retrieval_source, i, end, retrieval_num, device
             )
-            retrieved_label = torch.from_numpy(retrieved_label_list[i:end, :retrieval_num]).cuda()
+            retrieved_label = torch.from_numpy(retrieved_label_list[i:end, :retrieval_num]).to(device)
 
             target_count = min(target_num, retrieved_label.shape[1])
             retrieved_visual_feature_embedding_cls_ = retrieved_visual_feature_embedding_cls[:, :target_count, :, :]
@@ -192,16 +199,18 @@ if __name__ == '__main__':
                         help='number of retrieved items used for RRCP generation')
     parser.add_argument('--target_num', type=int, default=None,
                         help='number of retrieved items expected by the all-item RRCP model; defaults to retrieval_num')
+    parser.add_argument('--device', type=str, default=None, help='torch device, for example cuda:0 or cpu')
 
     args = parser.parse_args()
 
     target_num = args.target_num if args.target_num is not None else args.retrieval_num
+    device = resolve_device(args.device)
     all_model_path = args.all_model_path
     dissembled_model_path = args.dissembled_model_path
 
     retrieval_num = args.retrieval_num
     original_path = args.dataset_path
-    print(f'RRCP generation uses retrieval_num={retrieval_num}, target_num={target_num}.')
+    print(f'RRCP generation uses retrieval_num={retrieval_num}, target_num={target_num}, device={device}.')
 
     for dataset in ['train', 'valid', 'test']:
         input_path = f'{original_path}/{dataset}.pkl'
@@ -209,10 +218,10 @@ if __name__ == '__main__':
 
         print(f'Processing {dataset} dataset...')
         # print('Processing RRCP_gold...')
-        # preprocess_RRCP_gold(input_path, dissembled_model_path, output_path, target_num, retrieval_num)
+        # preprocess_RRCP_gold(input_path, dissembled_model_path, output_path, target_num, retrieval_num, device)
 
         print('Processing RRCP_silver...')
         preprocess_RRCP_silver(input_path, dissembled_model_path, all_model_path, output_path, target_num,
-                               retrieval_num)
+                               retrieval_num, device)
 
         print(f'{dataset} dataset processing completed.')
