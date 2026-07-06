@@ -38,7 +38,7 @@ First, download the datasets:
 
 - ICIP: the original link (http://www.visiongarage.altervista.org/popularitydataset/) is currently unavailable.
   A read-only copy of the raw dataset is available on [Google Drive](https://drive.google.com/drive/folders/1eToci8-r0_E-zUuvbqSnAPkmO8aHvm67?usp=sharing) for academic research only.
-- SMPD: https://smp-challenge.com
+- SMPD: https://smp-challenge.com/download_image.html
 - Instagram: https://sites.google.com/site/sbkimcv/dataset/instagram-influencer-dataset
 
 Then place the datasets in the corresponding `datasets/raw_dataset/` folder.
