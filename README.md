@@ -42,6 +42,8 @@ First, download the datasets:
 - Instagram: https://sites.google.com/site/sbkimcv/dataset/instagram-influencer-dataset
 
 Then place the datasets in the corresponding `datasets/raw_dataset/` folder.
+Datasets are split chronologically into train/validation/test sets (8:1:1);
+seed 12 is used whenever sampling is required.
 
 The storage format of the dataset is as follows:
 
@@ -58,23 +60,14 @@ datasets/
         1.jpg
         2.jpg
     SMPD/
-      train_additional_information.json
-      train_category.json
-      train_temporalspatial_information.json
-      train_user_data.json
-      train_label.txt
-      train_text.json
-      pic/
-        1.jpg
-        2.jpg
+      SMP_image_train_metadata.zip
+      SMP_image_train_images.zip
     Instagram/
-      json/
-        1.json
-        2.json
-      pic/
-        1.jpg
-        2.jpg
-      post_info.txt
+      JSON-Image_files_mapping.txt
+      Post_metadata/
+        posts_info.zip
+      Post_images/
+        posts_image.zip
 ```
 
 ## Usage

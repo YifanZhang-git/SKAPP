@@ -46,9 +46,9 @@ class GraphConvolution(nn.Module):
         self.hidden_dim = hidden_dim
         self.bias = bias
         self.class_num = class_num
-        self.gcn_weights = nn.Parameter(torch.ones(self.hidden_dim, self.hidden_dim)).to(device)
+        self.gcn_weights = nn.Parameter(torch.ones(self.hidden_dim, self.hidden_dim))
         if self.bias:
-            self.gcn_bias = nn.Parameter(torch.zeros(class_num, self.hidden_dim)).to(device)
+            self.gcn_bias = nn.Parameter(torch.zeros(class_num, self.hidden_dim))
 
         self.reset_parameters()
 
@@ -60,7 +60,7 @@ class GraphConvolution(nn.Module):
         x = feat
         node_size = adj.size()[1]
         adj = torch.clip(adj, min=0.0)
-        I = torch.eye(node_size, device=self.device).unsqueeze(dim=0).expand(adj.size(0), -1, -1)
+        I = torch.eye(node_size, device=adj.device).unsqueeze(dim=0).expand(adj.size(0), -1, -1)
         adj = adj + I
         adj = graph_norm_ours(adj, mask, batch=True, self_loop=True, symmetric=True)
 

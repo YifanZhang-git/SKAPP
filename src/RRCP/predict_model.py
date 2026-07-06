@@ -14,7 +14,7 @@ class RRCP_Model(nn.Module):
         self.predict_linear_2 = nn.Linear(feature_dim * 2, 1)
         self.relu = nn.ReLU()
         self.label_embedding_linear = nn.Linear(retrieval_num, feature_dim)
-        self.GraphLearner = GraphLearner(device='cuda:0', hidden_dim=768, class_num=self.retrieval_num)
+        self.GraphLearner = GraphLearner(device=None, hidden_dim=feature_dim, class_num=self.retrieval_num)
         self.multihead_attn = nn.MultiheadAttention(embed_dim=feature_dim, num_heads=8,batch_first=True)
         self.feature_attention = nn.Linear(feature_dim, 1)
 

@@ -9,18 +9,13 @@ from retrieval_utils import run_retrieval_pipeline
 
 
 SCALAR_FEATURES = [
-    "user_id",
-    "pathalias",
     "category",
     "subcategory",
     "concepts",
     "postdate",
-    "photo_firstdate",
-    "photo_firstdatetaken",
-    "photo_count",
     "time_zone_id",
 ]
-LIST_FEATURES = ["nouns", "verbs"]
+LIST_FEATURES = ["tags", "nouns", "verbs"]
 
 
 def parse_args():
@@ -28,7 +23,12 @@ def parse_args():
     parser.add_argument("--dataset_path", default="datasets/SMPD/dataset.pkl", help="Input SMPD dataset pickle")
     parser.add_argument("--output_dir", default=None, help="Output directory for train/valid/test/retrieval_pool")
     parser.add_argument("--retrieval_num", default=50, type=int, help="Number of retrieved UGCs per query")
-    parser.add_argument("--seed", default=42, type=int, help="Random seed for train/valid/test split")
+    parser.add_argument("--seed", default=12, type=int, help="Random seed used only when --split_column is empty")
+    parser.add_argument(
+        "--split_column",
+        default="split",
+        help="Column containing temporal train/valid/test splits. Use empty string to request a random split.",
+    )
     return parser.parse_args()
 
 
@@ -44,6 +44,7 @@ def main():
         seed=args.seed,
         dataset_name="SMPD",
         weight_mode="pool_ratio",
+        split_column=args.split_column or None,
     )
     print(f"Runtime: {(time.time() - start_time) / 60:.2f} minutes")
 

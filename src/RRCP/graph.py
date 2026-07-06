@@ -57,9 +57,9 @@ class GraphConvolution(nn.Module):
     def forward(self, feat, adj):
         x = feat
         node_size = adj.size()[1]
-        adj = torch.clip(adj, min=0.0) 
-        I = torch.eye(node_size, device='cuda').unsqueeze(dim=0).to(self.device)
-        adj = adj + I 
+        adj = torch.clip(adj, min=0.0)
+        I = torch.eye(node_size, device=adj.device).unsqueeze(dim=0)
+        adj = adj + I
         adj = graph_norm_ours(adj, batch=True, self_loop=True, symmetric=True)
         x = x.transpose(1, 2) 
 

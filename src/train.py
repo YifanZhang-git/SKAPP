@@ -18,10 +18,8 @@ from scipy.stats import spearmanr
 BLUE = '\033[94m'
 ENDC = '\033[0m'
 DEFAULT_METADATA_FIELDS = {
-    'ICIP': ['mean_views'],
 }
 DEFAULT_METADATA_TRANSFORMS = {
-    'ICIP': 'log1p',
 }
 
 
@@ -268,7 +266,7 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--seed', default='2024', type=str, help='value of random seed')
+    parser.add_argument('--seed', default='12', type=str, help='value of random seed')
     parser.add_argument('--device', default='cuda:0', type=str, help='device used in training')
     parser.add_argument('--metric', default='MSE', type=str, help='the judgement of the training')
     parser.add_argument('--save', default=r'./saved_models',

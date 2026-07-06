@@ -70,7 +70,7 @@ def _retrieved_labels(dataframe):
 
 class MyData(torch.utils.data.Dataset):
 
-    def __init__(self, retrieval_num, path, single_item_seed=42, single_item_retrieval_limit=None):
+    def __init__(self, retrieval_num, path, single_item_seed=12, single_item_retrieval_limit=None):
         super().__init__()
 
         self.path = Path(path)

@@ -16,10 +16,8 @@ from RRCP_prediction_variable_lenth import RRCP_prediction as my_model
 BLUE = '\033[94m'
 ENDC = '\033[0m'
 DEFAULT_METADATA_FIELDS = {
-    'ICIP': ['mean_views'],
 }
 DEFAULT_METADATA_TRANSFORMS = {
-    'ICIP': 'log1p',
 }
 
 
@@ -171,7 +169,7 @@ def main(args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', default='2024', type=str, help='value of random seed')
+    parser.add_argument('--seed', default='12', type=str, help='value of random seed')
     parser.add_argument('--device', default='cuda:0', type=str, help='device used in testing')
     parser.add_argument('--metric', default=['MSE', 'SRC', 'MAE'], type=list, help='the judgement of the testing')
     parser.add_argument('--save', default=r'/saved_models/', type=str, help='folder to save the results')
