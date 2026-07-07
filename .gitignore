@@ -4,6 +4,7 @@ datasets/
 run_logs/
 *.jpg
 *.txt
+!/requirements.txt
 *.pth
 *.pkl
 saved_models/*
