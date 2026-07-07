@@ -25,12 +25,19 @@ conda create --name skapp python=3.9
 # activate virtual environment
 conda activate skapp
 
-# install other dependencies
-# make sure CUDA and PyTorch are installed for your system
-pip3 install torch ..... # please refer to https://pytorch.org/ for your specific machine and software conditions
-pip3 install pandas huggingface-hub tqdm scikit-learn transformers angle_emb
-# install spacy: https://spacy.io/usage
+# install PyTorch for your CUDA/CPU setup
+# please refer to https://pytorch.org/ for your specific machine and software conditions
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# install the remaining pinned dependencies
+python -m pip install -r requirements.txt
 ```
+
+The versions in `requirements.txt` are pinned to avoid known compatibility
+issues with recent `transformers`, `spaCy`, and `aiohttp` releases under
+Python 3.9. If your CUDA version is not compatible with the example PyTorch
+command above, install the matching PyTorch build first, then run
+`python -m pip install -r requirements.txt`.
 
 ## Dataset Preparation
 
