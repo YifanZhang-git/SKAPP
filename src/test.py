@@ -125,10 +125,8 @@ def test(args):
     checkpoint = torch.load(args.model_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
 
-    total_test_step = 0
-    total_MAE = 0
-    total_MSE = 0
-    total_SRC = 0
+    all_outputs = []
+    all_labels = []
     print_init_msg(logger, args)
     model.eval()
     with torch.no_grad():
@@ -146,16 +144,19 @@ def test(args):
             output = output.detach().cpu().numpy()
             label = label.detach().cpu().numpy()
 
-            MAE = mean_absolute_error(label, output)
-            SRC, _ = spearmanr(output, label)
-            MSE = mean_squared_error(y_pred=output, y_true=label)
-            total_test_step += 1
-            total_MAE += MAE
-            total_SRC += SRC
-            total_MSE += MSE
+            all_outputs.append(output.reshape(-1))
+            all_labels.append(label.reshape(-1))
 
-    logger.warning(f"[ Test Result ]:  \n {args.metric[0]} = {total_MSE / total_test_step}"
-                   f"\n{args.metric[1]} = {total_SRC / total_test_step}\n{args.metric[2]} = {total_MAE / total_test_step}\n")
+    all_outputs = np.concatenate(all_outputs)
+    all_labels = np.concatenate(all_labels)
+    MSE = mean_squared_error(y_pred=all_outputs, y_true=all_labels)
+    MAE = mean_absolute_error(all_labels, all_outputs)
+    SRC, _ = spearmanr(all_labels, all_outputs)
+    if not np.isfinite(SRC):
+        SRC = 0.0
+
+    logger.warning(f"[ Test Result ]:  \n {args.metric[0]} = {MSE}"
+                   f"\n{args.metric[1]} = {SRC}\n{args.metric[2]} = {MAE}\n")
     logger.info("Test is ended!")
     delete_special_tokens(f"{father_folder_name}/{folder_name}/log.txt")
 
