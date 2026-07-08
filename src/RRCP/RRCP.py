@@ -28,6 +28,24 @@ def _retrieved_labels(df):
     return np.asarray(df[label_column].tolist(), dtype=np.float32)
 
 
+def resolve_dataset_dir(dataset_path):
+    path = Path(dataset_path)
+    if (path / 'train.pkl').exists():
+        return path
+    skapp_path = path / 'skapp'
+    if (skapp_path / 'train.pkl').exists():
+        return skapp_path
+    return path
+
+
+def _feature_bank_paths(input_path):
+    parent = Path(input_path).parent
+    return [
+        parent / 'retrieval_pool.pkl',
+        parent.parent / 'base' / 'train.pkl',
+    ]
+
+
 def _prepare_retrieval_source(df, input_path):
     if {'retrieved_visual_feature_embedding_cls', 'retrieved_textual_feature_embedding'}.issubset(df.columns):
         return {
@@ -36,15 +54,15 @@ def _prepare_retrieval_source(df, input_path):
             'textual': df['retrieved_textual_feature_embedding'].tolist(),
         }
 
-    pool_path = Path(input_path).parent / 'retrieval_pool.pkl'
-    if 'retrieved_item_id' not in df.columns or not pool_path.exists():
+    pool_path = next((path for path in _feature_bank_paths(input_path) if path.exists()), None)
+    if 'retrieved_item_id' not in df.columns or pool_path is None:
         raise KeyError(
             'Missing retrieved feature columns and feature-bank metadata. '
-            'Expected retrieved_item_id plus retrieval_pool.pkl.'
+            'Expected retrieved_item_id plus retrieval_pool.pkl or base/train.pkl.'
         )
 
     retrieval_pool = pd.read_pickle(pool_path)
-    id_to_pos = {item_id: idx for idx, item_id in enumerate(retrieval_pool['image_id'].tolist())}
+    id_to_pos = {str(item_id): idx for idx, item_id in enumerate(retrieval_pool['image_id'].tolist())}
     return {
         'mode': 'feature_bank',
         'id_lists': df['retrieved_item_id'].tolist(),
@@ -60,7 +78,7 @@ def _retrieved_batch(source, start, end, retrieval_num, device):
         textual = np.asarray(source['textual'][start:end], dtype=np.float32)[:, :retrieval_num]
     else:
         indices = np.asarray(
-            [[source['id_to_pos'][item_id] for item_id in item_ids[:retrieval_num]]
+            [[source['id_to_pos'][str(item_id)] for item_id in item_ids[:retrieval_num]]
              for item_ids in source['id_lists'][start:end]],
             dtype=np.int64,
         )
@@ -209,7 +227,7 @@ if __name__ == '__main__':
     dissembled_model_path = args.dissembled_model_path
 
     retrieval_num = args.retrieval_num
-    original_path = args.dataset_path
+    original_path = resolve_dataset_dir(args.dataset_path)
     print(f'RRCP generation uses retrieval_num={retrieval_num}, target_num={target_num}, device={device}.')
 
     for dataset in ['train', 'valid', 'test']:

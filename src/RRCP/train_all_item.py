@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))
 
-from config_utils import apply_cfg, explicit_arg_dests, load_cfg
+from config_utils import apply_cfg, explicit_arg_dests, load_cfg, resolve_dataset_dir
 from dataset import MyData, custom_collate_fn
 from predict_model import RRCP_Model as my_model
 import random
@@ -108,9 +108,10 @@ def train_val(args):
 
     father_folder_name, folder_name, logger = make_saving_folder_and_logger(args)
     device = torch.device(args.device)
+    dataset_dir = resolve_dataset_dir(args.dataset_path, args.dataset_id)
 
-    train_data = MyData(args.retrieval_num, os.path.join(args.dataset_path, args.dataset_id, 'train.pkl'))
-    valid_data = MyData(args.retrieval_num, os.path.join(os.path.join(args.dataset_path, args.dataset_id, 'valid.pkl')))
+    train_data = MyData(args.retrieval_num, dataset_dir / 'train.pkl')
+    valid_data = MyData(args.retrieval_num, dataset_dir / 'valid.pkl')
     train_data_loader = make_data_loader(train_data, args, device)
     valid_data_loader = make_data_loader(valid_data, args, device)
     model = my_model(retrieval_num=args.retrieval_num)

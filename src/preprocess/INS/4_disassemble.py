@@ -13,6 +13,12 @@ def disassemble(path, output_path, retrieval_num):
 def parse_args():
     parser = argparse.ArgumentParser(description="Prepare dynamic Instagram single-item training paths.")
     parser.add_argument("--retrieval_num", default=50, type=int, help="Number of retrieved UGCs per query")
+    parser.add_argument("--source_path", default="datasets/INS/skapp", help="SKAPP split directory")
+    parser.add_argument(
+        "--output_path",
+        default="datasets/INS/skapp_dissembled",
+        help="Dynamic single-item directory",
+    )
     return parser.parse_args()
 
 
@@ -20,8 +26,8 @@ if __name__ == "__main__":
     args = parse_args()
     retrieval_num = args.retrieval_num
 
-    source_path = r'datasets/INS'
-    disassemble_path = r'datasets/INS_dissembled'
+    source_path = args.source_path
+    disassemble_path = args.output_path
 
     os.makedirs(disassemble_path, exist_ok=True)
 

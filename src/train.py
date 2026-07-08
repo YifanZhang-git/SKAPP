@@ -8,7 +8,7 @@ import torch
 from torch.optim import Adam, SGD
 from torch.utils.data import DataLoader
 
-from config_utils import apply_cfg, explicit_arg_dests, load_cfg
+from config_utils import apply_cfg, explicit_arg_dests, load_cfg, resolve_dataset_dir
 from dataset import MyData, custom_collate_fn
 from RRCP_prediction_variable_lenth import RRCP_prediction as my_model
 import random
@@ -142,16 +142,17 @@ def train_val(args):
     parent_folder_name, folder_name, logger = make_saving_folder_and_logger(args, timestamp)
 
     device = torch.device(args.device)
+    dataset_dir = resolve_dataset_dir(args.dataset_path, args.dataset_id)
 
     train_data = MyData(
         args.retrieval_num,
-        os.path.join(args.dataset_path, args.dataset_id, 'train.pkl'),
+        dataset_dir / 'train.pkl',
         metadata_fields=args.metadata_fields,
         metadata_transform=args.metadata_transform,
     )
     valid_data = MyData(
         args.retrieval_num,
-        os.path.join(os.path.join(args.dataset_path, args.dataset_id, 'valid.pkl')),
+        dataset_dir / 'valid.pkl',
         metadata_fields=args.metadata_fields,
         metadata_transform=args.metadata_transform,
     )

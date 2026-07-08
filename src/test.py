@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error,mean_squared_error
 from dataset import MyData, custom_collate_fn
+from config_utils import resolve_dataset_dir
 import random
 import numpy as np
 from scipy.stats import spearmanr
@@ -108,9 +109,10 @@ def test(args):
     file_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
+    dataset_dir = resolve_dataset_dir(args.dataset_path, args.dataset_id)
     test_data = MyData(
         args.retrieval_num,
-        os.path.join(os.path.join(args.dataset_path, args.dataset_id, 'test.pkl')),
+        dataset_dir / 'test.pkl',
         metadata_fields=args.metadata_fields,
         metadata_transform=args.metadata_transform,
     )

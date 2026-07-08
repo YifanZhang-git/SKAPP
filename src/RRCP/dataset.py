@@ -45,7 +45,7 @@ def _build_retrieval_indices(id_lists, retrieval_pool_ids, retrieval_num, chunk_
         missing_mask = pd.isna(flat_indices)
         if missing_mask.any():
             missing_id = id_array.reshape(-1)[np.where(missing_mask)[0][0]]
-            raise KeyError(f'Retrieved item id not found in retrieval_pool.pkl: {missing_id}')
+            raise KeyError(f'Retrieved item id not found in feature bank: {missing_id}')
         retrieval_indices[start:end] = flat_indices.reshape(id_array.shape).astype(dtype, copy=False)
 
     return retrieval_indices
@@ -66,6 +66,17 @@ def _lazy_permutation_params(size, seed):
 def _retrieved_labels(dataframe):
     label_column = 'retrieved_label_list' if 'retrieved_label_list' in dataframe.columns else 'retrieved_label'
     return np.asarray(dataframe[label_column].tolist(), dtype=np.float32)
+
+
+def _feature_bank_paths(path, dynamic_single_item=False):
+    parent = Path(path).parent
+    source_parent = parent
+    if dynamic_single_item:
+        source_parent = parent.with_name(parent.name[:-len('_dissembled')])
+    return [
+        source_parent / 'retrieval_pool.pkl',
+        source_parent.parent / 'base' / 'train.pkl',
+    ]
 
 
 class MyData(torch.utils.data.Dataset):
@@ -134,10 +145,14 @@ class MyData(torch.utils.data.Dataset):
         return True
 
     def _init_feature_bank(self, dataframe):
-        pool_path = self.path.parent / 'retrieval_pool.pkl'
-        if self.dynamic_single_item:
-            pool_path = self.path.parent.with_name(self.path.parent.name[:-len('_dissembled')]) / 'retrieval_pool.pkl'
-        if 'retrieved_item_id' not in dataframe.columns or not pool_path.exists():
+        if 'retrieved_item_id' not in dataframe.columns:
+            return False
+
+        pool_path = next(
+            (path for path in _feature_bank_paths(self.path, self.dynamic_single_item) if path.exists()),
+            None,
+        )
+        if pool_path is None:
             return False
 
         retrieval_pool = pd.read_pickle(pool_path)
