@@ -14,6 +14,12 @@ def disassemble(path, output_path, retrieval_num):
 def parse_args():
     parser = argparse.ArgumentParser(description="Prepare dynamic ICIP single-item training paths.")
     parser.add_argument("--retrieval_num", default=50, type=int, help="Number of retrieved UGCs per query")
+    parser.add_argument("--source_path", default="datasets/ICIP/skapp", help="SKAPP split directory")
+    parser.add_argument(
+        "--output_path",
+        default="datasets/ICIP/skapp_dissembled",
+        help="Dynamic single-item directory",
+    )
     return parser.parse_args()
 
 
@@ -22,8 +28,8 @@ def main():
     start_time = time.time()
 
     retrieval_num = args.retrieval_num
-    source_path = r'datasets/ICIP'
-    disassemble_path = r'datasets/ICIP_dissembled'
+    source_path = args.source_path
+    disassemble_path = args.output_path
 
     os.makedirs(disassemble_path, exist_ok=True)
 

@@ -49,7 +49,7 @@ First, download the datasets:
 - Instagram: https://sites.google.com/site/sbkimcv/dataset/instagram-influencer-dataset
 
 Then place the datasets in the corresponding `datasets/raw_dataset/` folder.
-Datasets are split chronologically into train/validation/test sets (8:1:1);
+Datasets are split chronologically into train/validation/test sets (7:1:2);
 seed 12 is used whenever sampling is required.
 
 The storage format of the dataset is as follows:
@@ -75,6 +75,17 @@ datasets/
         posts_info.zip
       Post_images/
         posts_image.zip
+  ICIP/
+    dataset.pkl
+    base/
+      train.pkl
+      valid.pkl
+      test.pkl
+      split_ids.json
+    skapp/
+      train.pkl
+      valid.pkl
+      test.pkl
 ```
 
 ## Usage
@@ -90,9 +101,12 @@ the pretrained models will be downloaded once.
 cd skapp
 python src/preprocess/ICIP/1_build_dataset.py
 python src/preprocess/ICIP/2_preprocess.py
-python src/preprocess/ICIP/3_retrieval.py
-python src/preprocess/ICIP/4_disassemble.py  # prepares the dynamic single-item training split
+python src/preprocess/ICIP/3_retrieval.py  # writes datasets/ICIP/base and datasets/ICIP/skapp
+python src/preprocess/ICIP/4_disassemble.py  # prepares datasets/ICIP/skapp_dissembled
 ```
+
+The `base/` split is the shared model-agnostic dataset. The `skapp/` split adds
+SKAPP-specific retrieval fields and uses `base/train.pkl` as the feature bank.
 
 ### Pre-training
 

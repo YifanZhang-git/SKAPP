@@ -17,6 +17,48 @@ def config_dataset_id(dataset_id):
     return DATASET_ALIASES.get(base_id, base_id)
 
 
+def storage_dataset_id(dataset_id):
+    base_id = str(dataset_id)
+    if base_id.endswith('_dissembled'):
+        base_id = base_id[:-len('_dissembled')]
+    return base_id
+
+
+def resolve_dataset_dir(dataset_path, dataset_id, protocol='skapp'):
+    root = Path(dataset_path)
+    raw_id = storage_dataset_id(dataset_id)
+    cfg_id = config_dataset_id(dataset_id)
+    suffix = '_dissembled' if str(dataset_id).endswith('_dissembled') else ''
+    protocol_dir = f'{protocol}{suffix}'
+
+    direct_protocol = root / protocol_dir
+    if direct_protocol.exists():
+        return direct_protocol
+    if (root / 'train.pkl').exists():
+        return root
+    if (root / 'dataset.pkl').exists():
+        return direct_protocol
+
+    candidates = []
+    for base_id in dict.fromkeys([raw_id, cfg_id]):
+        candidates.append(root / base_id / protocol_dir)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    legacy_candidates = [
+        root / str(dataset_id),
+        root / raw_id,
+        root / cfg_id,
+    ]
+    for candidate in dict.fromkeys(legacy_candidates):
+        if (candidate / 'train.pkl').exists():
+            return candidate
+
+    return candidates[0]
+
+
 def config_path():
     repo_config = Path(__file__).resolve().parents[1] / 'config.yaml'
     if repo_config.exists():

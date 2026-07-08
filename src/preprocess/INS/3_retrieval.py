@@ -23,7 +23,7 @@ def _parse_feature_list(value):
 def parse_args():
     parser = argparse.ArgumentParser(description="Split Instagram and retrieve top-K train-pool neighbors.")
     parser.add_argument("--dataset_path", default="datasets/INS/dataset.pkl", help="Input Instagram dataset pickle")
-    parser.add_argument("--output_dir", default=None, help="Output directory for train/valid/test/retrieval_pool")
+    parser.add_argument("--output_dir", default=None, help="Dataset root for base/ and skapp/ split outputs")
     parser.add_argument("--retrieval_num", default=50, type=int, help="Number of retrieved UGCs per query")
     parser.add_argument("--seed", default=12, type=int, help="Random seed used only when --split_column is empty")
     parser.add_argument(

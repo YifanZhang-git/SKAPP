@@ -57,21 +57,29 @@ def _stack_feature(series):
 
 
 def _build_retrieval_indices(id_lists, retrieval_pool_ids, retrieval_num):
-    id_array = np.asarray([item_ids[:retrieval_num] for item_ids in id_lists], dtype=object)
-    pool_ids = pd.Index(retrieval_pool_ids)
+    id_array = np.asarray([item_ids[:retrieval_num] for item_ids in id_lists], dtype=object).astype(str)
+    pool_ids = pd.Index([str(item_id) for item_id in retrieval_pool_ids])
     pool_positions = pd.Series(np.arange(len(pool_ids)), index=pool_ids)
     pool_positions = pool_positions[~pool_positions.index.duplicated(keep='last')]
     flat_indices = pool_positions.reindex(id_array.reshape(-1)).to_numpy()
     missing_mask = pd.isna(flat_indices)
     if missing_mask.any():
         missing_id = id_array.reshape(-1)[np.where(missing_mask)[0][0]]
-        raise KeyError(f'Retrieved item id not found in retrieval_pool.pkl: {missing_id}')
+        raise KeyError(f'Retrieved item id not found in feature bank: {missing_id}')
     return flat_indices.reshape(id_array.shape).astype(np.int64, copy=False)
 
 
 def _retrieved_labels(dataframe):
     label_column = 'retrieved_label_list' if 'retrieved_label_list' in dataframe.columns else 'retrieved_label'
     return np.asarray(dataframe[label_column].tolist(), dtype=np.float32)
+
+
+def _feature_bank_paths(path):
+    parent = Path(path).parent
+    return [
+        parent / 'retrieval_pool.pkl',
+        parent.parent / 'base' / 'train.pkl',
+    ]
 
 
 def _resolve_metadata_fields(dataframe, fields):
@@ -143,8 +151,11 @@ class MyData(torch.utils.data.Dataset):
         self.dataframe = None
 
     def _init_feature_bank(self):
-        pool_path = self.path.parent / 'retrieval_pool.pkl'
-        if 'retrieved_item_id' not in self.dataframe.columns or not pool_path.exists():
+        if 'retrieved_item_id' not in self.dataframe.columns:
+            return False
+
+        pool_path = next((path for path in _feature_bank_paths(self.path) if path.exists()), None)
+        if pool_path is None:
             return False
 
         retrieval_pool = pd.read_pickle(pool_path)

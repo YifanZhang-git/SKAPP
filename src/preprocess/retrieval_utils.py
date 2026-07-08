@@ -2,7 +2,6 @@ import heapq
 import json
 import math
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +12,8 @@ from tqdm import tqdm
 
 DEFAULT_SEED = 12
 SPLIT_VALUES = ("train", "valid", "test")
+DEFAULT_TRAIN_RATIO = 0.7
+DEFAULT_VALID_RATIO = 0.1
 
 DANGEROUS_FEATURES = {
     "label",
@@ -77,7 +78,7 @@ def _temporal_sort_key(series, time_column):
 
 
 def assign_temporal_splits(dataframe, time_column, tie_break_columns=None,
-                           train_ratio=0.8, valid_ratio=0.1):
+                           train_ratio=DEFAULT_TRAIN_RATIO, valid_ratio=DEFAULT_VALID_RATIO):
     if time_column not in dataframe.columns:
         raise KeyError(f"Temporal split column not found: {time_column}")
 
@@ -113,11 +114,19 @@ def assign_temporal_splits(dataframe, time_column, tie_break_columns=None,
     return data.drop(columns=["_temporal_sort_key"])
 
 
-def split_and_save_pkl(input_path, train_path, valid_path, test_path, seed=DEFAULT_SEED):
+def split_and_save_pkl(input_path, train_path, valid_path, test_path, seed=DEFAULT_SEED,
+                       train_ratio=DEFAULT_TRAIN_RATIO, valid_ratio=DEFAULT_VALID_RATIO):
     dataset = pd.read_pickle(input_path)
 
-    train_data, valid_data = train_test_split(dataset, test_size=0.2, random_state=seed)
-    valid_data, test_data = train_test_split(valid_data, test_size=0.5, random_state=seed)
+    if train_ratio <= 0 or valid_ratio <= 0 or train_ratio + valid_ratio >= 1:
+        raise ValueError("Split ratios must satisfy train_ratio > 0, valid_ratio > 0, and sum < 1.")
+
+    holdout_ratio = 1.0 - train_ratio
+    test_ratio_within_holdout = (1.0 - train_ratio - valid_ratio) / holdout_ratio
+    train_data, holdout_data = train_test_split(dataset, test_size=holdout_ratio, random_state=seed)
+    valid_data, test_data = train_test_split(
+        holdout_data, test_size=test_ratio_within_holdout, random_state=seed
+    )
 
     train_data.reset_index(drop=True, inplace=True)
     valid_data.reset_index(drop=True, inplace=True)
@@ -161,33 +170,25 @@ def split_by_column_and_save_pkl(input_path, train_path, valid_path, test_path, 
     }
 
 
-def write_split_manifest(output_dir, dataset_path, dataset_name, seed, split_column,
-                         split_counts, retrieval_num, scalar_features, list_features,
-                         extra_list_columns=None, exclude_group_column=None):
-    manifest = {
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "dataset_name": dataset_name,
-        "dataset_path": str(dataset_path),
-        "split_method": f"column:{split_column}" if split_column else "random_80_10_10",
-        "seed": int(seed),
-        "split_counts": split_counts,
-        "retrieval_num": int(retrieval_num),
-        "scalar_features": list(scalar_features),
-        "list_features": list(list_features),
-        "extra_list_columns": list(extra_list_columns or []),
-        "exclude_group_column": exclude_group_column,
-        "retrieval_pool": "train",
-    }
-    output_path = Path(output_dir) / "split_manifest.json"
+def _json_scalar(value):
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def write_split_ids(output_dir, split_paths):
+    split_ids = {}
+    for split_name, split_path in split_paths.items():
+        dataframe = pd.read_pickle(split_path)
+        if "image_id" not in dataframe.columns:
+            raise KeyError(f"Cannot write split_ids.json; {split_path} has no image_id column.")
+        split_ids[split_name] = [_json_scalar(image_id) for image_id in dataframe["image_id"].tolist()]
+
+    output_path = Path(output_dir) / "split_ids.json"
     with open(output_path, "w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, indent=2)
-
-
-def create_retrieval_pool(train_path, valid_path, retrieval_pool_path):
-    retrieval_pool = pd.read_pickle(train_path).copy()
-    retrieval_pool.reset_index(drop=True, inplace=True)
-    retrieval_pool.to_pickle(retrieval_pool_path)
-    return retrieval_pool
+        json.dump(split_ids, handle, indent=2)
 
 
 def add_retrieved_label_alias(split_paths):
@@ -389,9 +390,10 @@ def _select_top(scores, retrieval_num, pool_size, excluded_indices, tie_break="a
 def retrieval_data(retrieval_num, data_path, retrieval_pool_path, scalar_features, list_features,
                    dataset_name="dataset", weight_mode="idf", absolute_weight=False,
                    tie_break="asc", include_zero_score_candidates=False,
-                   exclude_group_column=None):
+                   exclude_group_column=None, output_path=None):
     retrieval_pool = pd.read_pickle(retrieval_pool_path)
     data = pd.read_pickle(data_path)
+    output_path = Path(output_path) if output_path else Path(data_path)
     required = set(scalar_features + list_features + ["image_id", "label"])
     if exclude_group_column:
         required.add(exclude_group_column)
@@ -445,7 +447,8 @@ def retrieval_data(retrieval_num, data_path, retrieval_pool_path, scalar_feature
     data["retrieved_item_id"] = retrieved_item_id_list
     data["retrieved_item_similarity"] = retrieved_item_similarity_list
     data["retrieved_label"] = retrieved_label_list
-    data.to_pickle(data_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    data.to_pickle(output_path)
 
 
 def run_retrieval_pipeline(dataset_path, output_dir, retrieval_num, scalar_features, list_features,
@@ -454,46 +457,55 @@ def run_retrieval_pipeline(dataset_path, output_dir, retrieval_num, scalar_featu
                            include_zero_score_candidates=False, split_column=None,
                            exclude_group_column=None):
     dataset_path = Path(dataset_path)
-    output_dir = Path(output_dir) if output_dir else dataset_path.parent
-    output_dir.mkdir(parents=True, exist_ok=True)
+    dataset_root = Path(output_dir) if output_dir else dataset_path.parent
+    base_dir = dataset_root / "base"
+    skapp_dir = dataset_root / "skapp"
+    base_dir.mkdir(parents=True, exist_ok=True)
+    skapp_dir.mkdir(parents=True, exist_ok=True)
 
-    train_path = output_dir / "train.pkl"
-    valid_path = output_dir / "valid.pkl"
-    test_path = output_dir / "test.pkl"
-    retrieval_pool_path = output_dir / "retrieval_pool.pkl"
+    base_paths = {
+        "train": base_dir / "train.pkl",
+        "valid": base_dir / "valid.pkl",
+        "test": base_dir / "test.pkl",
+    }
+    skapp_paths = {
+        "train": skapp_dir / "train.pkl",
+        "valid": skapp_dir / "valid.pkl",
+        "test": skapp_dir / "test.pkl",
+    }
 
     validate_retrieval_features(scalar_features + list_features + (extra_list_columns or []))
     dedupe_columns = list(dict.fromkeys(list_features + (extra_list_columns or [])))
     dedupe_list_columns(dataset_path, dedupe_columns, dataset_name)
     if split_column:
-        split_counts = split_by_column_and_save_pkl(dataset_path, train_path, valid_path, test_path, split_column)
+        split_counts = split_by_column_and_save_pkl(
+            dataset_path, base_paths["train"], base_paths["valid"], base_paths["test"], split_column
+        )
     else:
-        split_counts = split_and_save_pkl(dataset_path, train_path, valid_path, test_path, seed)
-    print("Split dataset done!")
-    write_split_manifest(
-        output_dir, dataset_path, dataset_name, seed, split_column, split_counts,
-        retrieval_num, scalar_features, list_features, extra_list_columns, exclude_group_column
-    )
-
-    create_retrieval_pool(train_path, valid_path, retrieval_pool_path)
-    print("Create retrieval pool done!")
+        split_counts = split_and_save_pkl(
+            dataset_path, base_paths["train"], base_paths["valid"], base_paths["test"], seed
+        )
+    write_split_ids(base_dir, base_paths)
+    print("Base split dataset done!")
+    print(f"Base splits: {base_dir}")
+    print(f"SKAPP splits: {skapp_dir}")
 
     retrieval_data(
-        retrieval_num, train_path, retrieval_pool_path, scalar_features, list_features,
+        retrieval_num, base_paths["train"], base_paths["train"], scalar_features, list_features,
         dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates,
-        exclude_group_column
+        exclude_group_column, output_path=skapp_paths["train"]
     )
     retrieval_data(
-        retrieval_num, valid_path, retrieval_pool_path, scalar_features, list_features,
+        retrieval_num, base_paths["valid"], base_paths["train"], scalar_features, list_features,
         dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates,
-        exclude_group_column
+        exclude_group_column, output_path=skapp_paths["valid"]
     )
     retrieval_data(
-        retrieval_num, test_path, retrieval_pool_path, scalar_features, list_features,
+        retrieval_num, base_paths["test"], base_paths["train"], scalar_features, list_features,
         dataset_name, weight_mode, absolute_weight, tie_break, include_zero_score_candidates,
-        exclude_group_column
+        exclude_group_column, output_path=skapp_paths["test"]
     )
     print("Retrieval done!")
 
-    add_retrieved_label_alias([train_path, valid_path, test_path])
-    print("Stack retrieved feature done!")
+    add_retrieved_label_alias(list(skapp_paths.values()))
+    print("SKAPP retrieval splits done!")
